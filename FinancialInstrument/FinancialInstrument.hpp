@@ -48,7 +48,7 @@ namespace instrument {
 
         }
 
-        void handleTrade(const std::unique_ptr<messageSpecs::Trade> &trade) {
+        void handleTrade(const uint64_t &tradeQuantity, const char &side) {
 
         }
 
