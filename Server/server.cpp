@@ -1,5 +1,4 @@
-//Example code: A simple server side code, which echos back the received message.
-//Handle multiple socket connections with select and fd_set on Linux 
+//Socket code has been taken from geeksforgeeks https://www.geeksforgeeks.org/socket-programming-in-cc-handling-multiple-clients-on-server-without-multi-threading/?ref=lbp
 #include <stdio.h> 
 #include <string.h>   //strlen 
 #include <stdlib.h> 
@@ -25,6 +24,10 @@ using std::unique_ptr;
 #define FALSE  0 
 #define PORT 51717 
 
+
+/**
+ * Creates an orderResponse message to be sent to the client.
+**/
 char* createMessage(const messageSpecs::OrderResponse &response, const uint32_t &currentSequenceNumber) {
     char *message = new char[28];
     messageSpecs::Header header;
@@ -38,6 +41,9 @@ char* createMessage(const messageSpecs::OrderResponse &response, const uint32_t 
 
 }
 
+/**
+ * Parses the message from client and does the processing accordingly.
+**/
 void parseMessage(const int &sd, int &valread, char* buffer, unique_ptr<portfolio::PortfolioRiskManager> &riskManager) {
 
     messageSpecs::Header header;
@@ -52,7 +58,7 @@ void parseMessage(const int &sd, int &valread, char* buffer, unique_ptr<portfoli
                                                    std::memcpy(&newOrder, buffer, header.payloadSize);
                                                    messageSpecs::OrderResponse response = riskManager->newOrder(sd, newOrder);
                                                    message = createMessage(response, header.sequenceNumber);
-                                                   cout<<"Sending message \n";
+                                                   cout<<"Sending message to the client \n";
                                                    send(sd,message,28,0);
                                                    break;
                                                    }
@@ -67,12 +73,16 @@ void parseMessage(const int &sd, int &valread, char* buffer, unique_ptr<portfoli
                                                               std::memcpy(&modifyOrderQuantity, buffer, header.payloadSize);
                                                               messageSpecs::OrderResponse response = riskManager->modifyOrder(modifyOrderQuantity);
                                                               message = createMessage(response, header.sequenceNumber);
+                                                              cout<<"Sending message to the client \n";
                                                               send(sd,message,28,0);
                                                               break;
                                                               }
 
         case messageSpecs::Trade::MESSAGE_TYPE: { messageSpecs::Trade trade;
                                                 std::memcpy(&trade, buffer, header.payloadSize);
+                                                cout<<"hhhh\n";
+                                                cout<<trade.listingId<<std::endl;
+                                                cout<<trade.tradePrice<<std::endl;
                                                 riskManager->trade(trade);
                                                 break;
                                                 }
@@ -91,22 +101,24 @@ void parseMessage(const int &sd, int &valread, char* buffer, unique_ptr<portfoli
 int main(int argc , char *argv[])  
 {  
     int opt = TRUE;  
-    int master_socket , addrlen , new_socket , client_socket[30] , 
-          max_clients = 30 , activity, i , valread , sd;  
+    int master_socket , addrlen , new_socket , client_socket[30] , max_clients = 30 , activity, i , valread , sd;  
     int max_sd;  
     struct sockaddr_in address;  
          
     char buffer[1025];  //data buffer of 1K
     configuration::Config config;
 
-    config.BUY_THRESHOLD = 20;
+    //Setting default values
+    config.BUY_THRESHOLD = 20; 
     config.SELL_THRESHOLD = 15;
 
-    if(argc>=3)
-        config.BUY_THRESHOLD = std::atoi(argv[2]);
+    if(argc>=2)
+        cout<<"Setting new buy threshold "<<std::atoi(argv[1])<<std::endl;
+        config.BUY_THRESHOLD = std::atoi(argv[1]);
 
-    if(argc>=4)
-        config.SELL_THRESHOLD = std::atoi(argv[3]);
+    if(argc>=3)
+        cout<<"Setting new sell threshold "<<std::atoi(argv[2])<<std::endl;
+        config.SELL_THRESHOLD = std::atoi(argv[2]);
         
     
     unique_ptr<portfolio::PortfolioRiskManager> riskManager = std::make_unique<portfolio::PortfolioRiskManager>(config); 
@@ -251,7 +263,7 @@ int main(int argc , char *argv[])
                 else 
                 {  
                     cout<<valread<<" bytes read \n";
-                    parseMessage(sd,valread,buffer,riskManager);
+                    parseMessage(sd,valread,buffer,riskManager); //Handle the incoming messages from clients
                     cout<<"\n";
                 }
 

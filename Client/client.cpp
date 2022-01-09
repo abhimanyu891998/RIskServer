@@ -16,6 +16,9 @@ using std::memcpy;
 
 uint32_t lastSequenceNumber = 0;
 
+/**
+ * Creates header for the message to be sent to the server based on the messageType
+**/
 void populateHeader(messageSpecs::Header &header, const int &messageType) {
 
     switch(messageType) {
@@ -59,6 +62,9 @@ void populateHeader(messageSpecs::Header &header, const int &messageType) {
     return;
 }
 
+/**
+ * Creates message to be sent to the server based on the messageType and returns a pair of message and message payload size.
+**/
 std::pair<char*,int> createMessage(const int &messageType) {
     char* message;
     messageSpecs::Header header;
@@ -71,7 +77,7 @@ std::pair<char*,int> createMessage(const int &messageType) {
             cin>>newOrder.orderId;
             cout<<"Order Price:\n";
             cin>>newOrder.orderPrice;
-            cout<<"Side: \n";
+            cout<<"Side (B/S): \n";
             cin>>newOrder.side;
             cout<<"Order Quantity: \n";
             cin>>newOrder.orderQuantity;
@@ -129,7 +135,7 @@ std::pair<char*,int> createMessage(const int &messageType) {
             populateHeader(header, 4);
             message = new char[50];
             memcpy(message, &header, 16);
-            memcpy(message, &trade, 34);
+            memcpy(message+16, &trade, 34);
             break;
         }
 
@@ -143,6 +149,9 @@ std::pair<char*,int> createMessage(const int &messageType) {
     return {message, header.payloadSize};
 }
 
+/**
+ * Client side of the program, it runs in an infinite loop and keeps accepting the instructions till the user disconnects.
+**/
 int main(int argc, char const *argv[])
 {
     int sock = 0, valread;
@@ -173,43 +182,44 @@ int main(int argc, char const *argv[])
     bool keepUp = true;
     int messageType;
 
+    //Runs till disconnect is issued.
     while(keepUp) {
         cout<<"Choose from the following message types and press the number corresponding to the type: \n";
         cout<<"1 - New Order \n 2 - Delete Order \n 3 - Modify Order \n 4 - Trade\n 6 - Disconnect\n";
         cin>>messageType;
         if(messageType == 6) {
-            keepUp = false;
+            keepUp = false; //disconnect
         }
         else {
-        
         std::pair<char*, int> messageObject = createMessage(messageType);
         char *message = messageObject.first;
         int payloadSize = messageObject.second;
         //Sending message to server
-        send(sock, message, 16+payloadSize, 0);
+        send(sock, message, 16+payloadSize, 0); //Sends the message to server
 
+        // If the type is add new order or modify and order, we expect a response from the server
         if(messageType == 1 || messageType == 3) {
-
+            //No response received from server
             if ((valread = read( sock , buffer, 16)) <= 0) {
                 std::cerr<<"Server disconnected";
                 break;
             }
-            printf("%s\n",buffer );
+
             messageSpecs::Header header;
-            memcpy(&header, buffer, 16);
+            memcpy(&header, buffer, 16); //Reading header of the response
 
             lastSequenceNumber = header.sequenceNumber;
-            cout<<header.sequenceNumber<<std::endl;
-            cout<<header.payloadSize<<"\n";
             valread = read(sock, buffer, header.payloadSize);
             messageSpecs::OrderResponse response;
             memcpy(&response, buffer, header.payloadSize);
 
-            cout<<"Response from server for the previous request with order ID: "<<response.orderId<<" is: \n";
+            cout<<"Response from server for the previous request with order ID: "<<response.orderId<<" is: ";
             if(response.status == messageSpecs::OrderResponse::Status::ACCEPTED)
                 cout<<"Accepted\n";
             else
                 cout<<"Rejected \n";
+
+            cout<<std::endl;
         } 
 
         }

@@ -15,17 +15,19 @@ using std::vector;
 using std::unordered_map;
 using std::unique_ptr;
 
-
+/**
+ * Risk manager for the overall portfolio, it stores the hash map of orders, maps users to their orders, and stores information about instruments.
+ **/
 namespace portfolio {
 
     class PortfolioRiskManager {
         
         private:
-        unordered_map<uint64_t, std::shared_ptr<orders::Order>> orders;
-        unordered_map<uint16_t, vector<uint64_t>> userOrders;
-        unordered_map<uint16_t, std::unique_ptr<instrument::FinancialInstrument>> instruments;
+        unordered_map<uint64_t, std::shared_ptr<orders::Order>> orders; //Order ID to order map
+        unordered_map<uint16_t, vector<uint64_t>> userOrders; //User id (socket descriptor) to order ID map
+        unordered_map<uint16_t, std::unique_ptr<instrument::FinancialInstrument>> instruments; //Instrument ID mapped to the instruments
 
-
+        //For creating the order response from server to client.
         void createResponse(messageSpecs::OrderResponse &orderResponse, const bool &acceptanceStatus, const uint64_t &orderId) {
             orderResponse.messageType = messageSpecs::OrderResponse::MESSAGE_TYPE;
             orderResponse.orderId = orderId;
@@ -34,12 +36,14 @@ namespace portfolio {
         }
 
         public:
+        //Contains details of thresholds and other configuration parameters can be added.
         configuration::Config config;
 
         PortfolioRiskManager(const configuration::Config &config):orders({}), userOrders({}), config(config){
 
         }
 
+        // Handles a new order, checks if the instrument is new, adds it to the list as well. Changes the state of system based on the acceptanceStatus.
         messageSpecs::OrderResponse newOrder(const int &sd, const messageSpecs::NewOrder &newOrder) {
 
             std::shared_ptr<orders::Order> order = std::make_shared<orders::Order>(newOrder.orderId, newOrder.listingId, newOrder.orderQuantity, newOrder.orderPrice, newOrder.side);
@@ -73,6 +77,7 @@ namespace portfolio {
             return orderResponse;
         }
 
+        //Handles order deletion.
         void deleteOrder(const messageSpecs::DeleteOrder &deleteOrder) {
             
             if(orders.find(deleteOrder.orderId) == orders.end()) {
@@ -100,6 +105,7 @@ namespace portfolio {
             return;
         }
 
+        //Modifies order if it is acceptable to do so, sends a response to the client if the modification request was accepted or not.
         messageSpecs::OrderResponse modifyOrder(const messageSpecs::ModifyOrderQuantity &modifyOrderQuantity) {
             messageSpecs::OrderResponse orderResponse;
             if(orders.find(modifyOrderQuantity.orderId) == orders.end()) {
@@ -135,6 +141,7 @@ namespace portfolio {
 
         }
 
+        //Updates the net position based on trade information for the instrument and the order.
         void trade(const messageSpecs::Trade &trade) {
 
             if(orders.find(trade.tradeId) == orders.end()) {
@@ -160,6 +167,7 @@ namespace portfolio {
             return;
         }
 
+        //Deletes the user and their associated orders.
         void deleteUser(const uint64_t &userId) {
 
             cout<<"------------------------------\n";

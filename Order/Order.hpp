@@ -12,6 +12,9 @@ using std::cin;
 using std::vector;
 using std::unordered_map;
 
+/**
+ * Simple order struct to store order specific information
+**/
 namespace orders {
 
     struct Order {

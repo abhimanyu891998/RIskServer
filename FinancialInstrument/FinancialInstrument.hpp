@@ -14,6 +14,11 @@ using std::cin;
 using std::vector;
 using std::unordered_map;
 
+
+/**
+ * Important part of the application, stores all the logic to identify if the order should be accepted or rejected.
+ * Updates state of the system accordingly, handles trades and deletion of orders as well.
+**/
 namespace instrument {
 
     class FinancialInstrument {
@@ -29,11 +34,11 @@ namespace instrument {
 
 
         uint64_t calculateBuyHypotheticalWorst() {
-            return std::max(buyQty, netPos+buyQty);
+            return std::max(buyQty, netPos+buyQty); //Based on the formula given in the problem statement
         }
 
         uint64_t calculateSellHypotheticalWorst() {
-            return std::max(sellQty, sellQty-netPos);
+            return std::max(sellQty, sellQty-netPos); //Based on the formula given in the problem statement
         }
 
         void setBuyHypotheticalWorst(const uint64_t &value) {
@@ -51,16 +56,22 @@ namespace instrument {
 
         }
 
-        bool assessAddOrder(const std::shared_ptr<orders::Order> &order) {
 
+        /**
+         * Check the new order and decides whether to accept it or not based on hypothetical worst position
+        **/
+        bool assessAddOrder(const std::shared_ptr<orders::Order> &order) {
+            cout<<"Assessing new order with order ID: "<<order->orderId<<std::endl;
+            cout<<"Threshold values for BUY and SELL respectively are: "<<BUY_THRESHOLD<<" "<<SELL_THRESHOLD<<std::endl;
             switch(order->side) {
 
                 case 'B' : { 
                           
                           buyQty+=order->quantity;
                           uint64_t currentBuyHypotheticalWorst = calculateBuyHypotheticalWorst();
+                          cout<<"Side for this order is BUY and currentBuyHypotheticalWorst is: "<<currentBuyHypotheticalWorst<<std::endl;
                           if(currentBuyHypotheticalWorst > BUY_THRESHOLD) {
-                              buyQty-=order->quantity;
+                              buyQty-=order->quantity; //Revert state of the system
                               currentBuyHypotheticalWorst = calculateBuyHypotheticalWorst();
                               setBuyHypotheticalWorst(currentBuyHypotheticalWorst);
                               return false;
@@ -71,8 +82,9 @@ namespace instrument {
 
                 case 'S' : { sellQty+=order->quantity;
                           uint64_t currentSellHypotheticalWorst = calculateSellHypotheticalWorst();
+                          cout<<"Side for this order is SELL and currentBuyHypotheticalWorst is: "<<currentSellHypotheticalWorst<<std::endl;
                           if(currentSellHypotheticalWorst > SELL_THRESHOLD) {
-                              sellQty-=order->quantity;
+                              sellQty-=order->quantity; //Revert state of the system
                               currentSellHypotheticalWorst = calculateSellHypotheticalWorst();
                               setSellHypotheticalWorst(currentSellHypotheticalWorst);
                               return false;
@@ -90,23 +102,28 @@ namespace instrument {
             return true;
         }
 
-
+        //Updates netPos and recalculates HypotheticalWorstPositions
         void handleTrade(const uint64_t &tradeQuantity, const char &side) {
             netPos += tradeQuantity;
             setBuyHypotheticalWorst(calculateBuyHypotheticalWorst());
             setSellHypotheticalWorst(calculateSellHypotheticalWorst());
         }
 
+        /**
+         * Similar to add new order, it checks if it is acceptable to modify the order.
+        **/
         bool assessModifyOrder(std::shared_ptr<orders::Order> &order, uint64_t newQty) {
-            
+            cout<<"Assessing new order with order ID: "<<order->orderId<<std::endl;
+            cout<<"Threshold values for BUY and SELL respectively are: "<<BUY_THRESHOLD<<" "<<SELL_THRESHOLD<<std::endl;           
             switch(order->side) {
 
                 case 'B': { buyQty-=order->quantity;
                           buyQty+=newQty;
                           uint64_t currentBuyHypotheticalWorst = calculateBuyHypotheticalWorst();
+                          cout<<"Side for this order is BUY and currentBuyHypotheticalWorst is: "<<currentBuyHypotheticalWorst<<std::endl;
                           if(currentBuyHypotheticalWorst > BUY_THRESHOLD) {
                               buyQty-=newQty;
-                              buyQty+=order->quantity;
+                              buyQty+=order->quantity; //Revert state
                               currentBuyHypotheticalWorst = calculateBuyHypotheticalWorst();
                               setBuyHypotheticalWorst(currentBuyHypotheticalWorst);
                               return false;
@@ -118,9 +135,10 @@ namespace instrument {
                 case 'S': { sellQty-=order->quantity;
                           sellQty+=newQty;
                           uint64_t currentSellHypotheticalWorst = calculateSellHypotheticalWorst();
+                          cout<<"Side for this order is SELL and currentBuyHypotheticalWorst is: "<<currentSellHypotheticalWorst<<std::endl;
                           if(currentSellHypotheticalWorst > SELL_THRESHOLD) {
                               sellQty-=newQty;
-                              sellQty+=order->quantity;
+                              sellQty+=order->quantity; //Revert state
                               currentSellHypotheticalWorst = calculateSellHypotheticalWorst();
                               setSellHypotheticalWorst(currentSellHypotheticalWorst);
                               return false;
@@ -134,8 +152,13 @@ namespace instrument {
                          break;
                          }
             }
+
+            return true;
         }
 
+        /**
+         * Removes the order and updates the state of this instrument
+         **/
         void deleteOrder(std::shared_ptr<orders::Order> &order) {
 
             switch(order->side) {
