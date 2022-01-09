@@ -212,13 +212,13 @@ int main(int argc, char const *argv[])
             valread = read(sock, buffer, header.payloadSize);
             messageSpecs::OrderResponse response;
             memcpy(&response, buffer, header.payloadSize);
-
+            cout<<"------------------------------------------------------------------------------------------\n";
             cout<<"Response from server for the previous request with order ID: "<<response.orderId<<" is: ";
             if(response.status == messageSpecs::OrderResponse::Status::ACCEPTED)
-                cout<<"Accepted\n";
+                cout<<"ACCEPTED\n";
             else
-                cout<<"Rejected \n";
-
+                cout<<"REJECTED \n";
+            cout<<"------------------------------------------------------------------------------------------\n";
             cout<<std::endl;
         } 
 
