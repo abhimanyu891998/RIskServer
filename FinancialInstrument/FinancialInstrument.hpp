@@ -46,16 +46,18 @@ namespace instrument {
 
         public:
 
-        FinancialInstrument():
-            netPos(0),buyQty(0),sellQty(0),buyHypotheticalWorst(0),sellHypotheticalWorst(0),BUY_THRESHOLD(Config::BUY_THRESHOLD),SELL_THRESHOLD(Config::SELL_THRESHOLD){
+        FinancialInstrument(const configuration::Config &config):
+            netPos(0),buyQty(0),sellQty(0),buyHypotheticalWorst(0),sellHypotheticalWorst(0),BUY_THRESHOLD(config.BUY_THRESHOLD),SELL_THRESHOLD(config.SELL_THRESHOLD){
 
         }
 
-        bool assessAddOrder(const std::unique_ptr<orders::Order> &order) {
+        bool assessAddOrder(const std::shared_ptr<orders::Order> &order) {
 
             switch(order->side) {
 
-                case 'B': buyQty+=order->quantity;
+                case 'B' : { 
+                          
+                          buyQty+=order->quantity;
                           uint64_t currentBuyHypotheticalWorst = calculateBuyHypotheticalWorst();
                           if(currentBuyHypotheticalWorst > BUY_THRESHOLD) {
                               buyQty-=order->quantity;
@@ -65,8 +67,9 @@ namespace instrument {
                           }
                             setBuyHypotheticalWorst(currentBuyHypotheticalWorst);
                             break;
+                          }
 
-                case 'S': sellQty+=order->quantity;
+                case 'S' : { sellQty+=order->quantity;
                           uint64_t currentSellHypotheticalWorst = calculateSellHypotheticalWorst();
                           if(currentSellHypotheticalWorst > SELL_THRESHOLD) {
                               sellQty-=order->quantity;
@@ -76,10 +79,12 @@ namespace instrument {
                           }
                           setSellHypotheticalWorst(currentSellHypotheticalWorst);
                           break;
+                          }
 
-                default: std::cerr<<"Invalid order side supplied";
+                default : { std::cerr<<"Invalid order side supplied";
                          return false;
                          break;
+                         }
             }
 
             return true;
@@ -92,11 +97,11 @@ namespace instrument {
             setSellHypotheticalWorst(calculateSellHypotheticalWorst());
         }
 
-        bool assessModifyOrder(std::unique_ptr<orders::Order> &order, uint64_t newQty) {
+        bool assessModifyOrder(std::shared_ptr<orders::Order> &order, uint64_t newQty) {
             
             switch(order->side) {
 
-                case 'B': buyQty-=order->quantity;
+                case 'B': { buyQty-=order->quantity;
                           buyQty+=newQty;
                           uint64_t currentBuyHypotheticalWorst = calculateBuyHypotheticalWorst();
                           if(currentBuyHypotheticalWorst > BUY_THRESHOLD) {
@@ -108,8 +113,9 @@ namespace instrument {
                             }
                             setBuyHypotheticalWorst(currentBuyHypotheticalWorst);
                             break;
+                            }
 
-                case 'S': sellQty-=order->quantity;
+                case 'S': { sellQty-=order->quantity;
                           sellQty+=newQty;
                           uint64_t currentSellHypotheticalWorst = calculateSellHypotheticalWorst();
                           if(currentSellHypotheticalWorst > SELL_THRESHOLD) {
@@ -121,28 +127,33 @@ namespace instrument {
                           }
                           setSellHypotheticalWorst(currentSellHypotheticalWorst);
                           break;
+                          }
 
-                default: std::cerr<<"Invalid order side supplied";
+                default: { std::cerr<<"Invalid order side supplied";
                          return false;
                          break;
+                         }
             }
         }
 
-        void deleteOrder(std::unique_ptr<orders::Order> &order) {
+        void deleteOrder(std::shared_ptr<orders::Order> &order) {
 
             switch(order->side) {
 
-                case 'B': buyQty-=order->quantity;
+                case 'B': { buyQty-=order->quantity;
                           setBuyHypotheticalWorst(calculateBuyHypotheticalWorst());
                           break;
+                          }
 
-                case 'S': sellQty-=order->quantity;
+                case 'S': { sellQty-=order->quantity;
                           setSellHypotheticalWorst(calculateSellHypotheticalWorst());
                           break;
+                          }
 
 
-                default: std::cerr<<"Invalid order side supplied";
-                         break;                          
+                default: { std::cerr<<"Invalid order side supplied";
+                         break;
+                         }                          
 
             }
 

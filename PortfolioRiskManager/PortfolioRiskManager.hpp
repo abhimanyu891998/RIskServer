@@ -21,37 +21,42 @@ namespace portfolio {
     class PortfolioRiskManager {
         
         private:
-        unordered_map<uint64_t, std::unique_ptr<orders::Order>> orders;
+        unordered_map<uint64_t, std::shared_ptr<orders::Order>> orders;
         unordered_map<uint16_t, vector<uint64_t>> userOrders;
         unordered_map<uint16_t, std::unique_ptr<instrument::FinancialInstrument>> instruments;
+
 
         void createResponse(messageSpecs::OrderResponse &orderResponse, const bool &acceptanceStatus, const uint64_t &orderId) {
             orderResponse.messageType = messageSpecs::OrderResponse::MESSAGE_TYPE;
             orderResponse.orderId = orderId;
             orderResponse.status = acceptanceStatus? messageSpecs::OrderResponse::Status::ACCEPTED : messageSpecs::OrderResponse::Status::REJECTED;
+            return;
         }
 
         public:
-        PortfolioRiskManager():orders({}), userOrders({}), instruments({}),BUY_THRESHOLD(20),SELL_THRESHOLD(15){
+        configuration::Config config;
+
+        PortfolioRiskManager(const configuration::Config &config):orders({}), userOrders({}), config(config){
 
         }
 
-        void newOrder(const int &sd, const messageSpecs::NewOrder &newOrder, messageSpecs::OrderResponse &orderResponse) {
+        messageSpecs::OrderResponse newOrder(const int &sd, const messageSpecs::NewOrder &newOrder) {
 
-            unique_ptr<orders::Order> order = std::make_unique<orders::Order>(newOrder.orderId, newOrder.listingId, newOrder.orderQuantity, newOrder.orderPrice, newOrder.side);
+            std::shared_ptr<orders::Order> order = std::make_shared<orders::Order>(newOrder.orderId, newOrder.listingId, newOrder.orderQuantity, newOrder.orderPrice, newOrder.side);
             if(instruments.find(newOrder.listingId) == instruments.end()) {
                 cout<<"Adding new instrument with ID: "<<newOrder.listingId<<"\n";
-                instruments[newOrder.listingId] = std::make_unique<instrument::FinancialInstrument>();
+                instruments[newOrder.listingId] = std::make_unique<instrument::FinancialInstrument>(config);
             }
 
             unique_ptr<instrument::FinancialInstrument> &instrument = instruments[newOrder.listingId];
 
             bool acceptanceStatus = instrument->assessAddOrder(order);
-    
+            
+            messageSpecs::OrderResponse orderResponse;
             createResponse(orderResponse, acceptanceStatus, newOrder.orderId);
 
             if(acceptanceStatus) {
-                orders[order->orderId] = std::move(order);
+                orders[order->orderId] = order;
                 userOrders[sd].push_back(order->orderId);
             }
 
@@ -64,6 +69,8 @@ namespace portfolio {
             cout<<"Side: "<<newOrder.side<<"\n";
             cout<<"Status: "<<(acceptanceStatus?"Accepted" : "Rejected")<<"\n";
             cout<<"------------------------------\n";
+
+            return orderResponse;
         }
 
         void deleteOrder(const messageSpecs::DeleteOrder &deleteOrder) {
@@ -73,7 +80,7 @@ namespace portfolio {
                 return;
             }
 
-            unique_ptr<orders::Order> &order = orders[deleteOrder.orderId];
+            std::shared_ptr<orders::Order> order = orders[deleteOrder.orderId];
             unique_ptr<instrument::FinancialInstrument> &instrument = instruments[order->instrumentId];
 
             instrument->deleteOrder(order);
@@ -93,14 +100,15 @@ namespace portfolio {
             return;
         }
 
-        void modifyOrder(const messageSpecs::ModifyOrderQuantity &modifyOrderQuantity, messageSpecs::OrderResponse &orderResponse) {
-            
+        messageSpecs::OrderResponse modifyOrder(const messageSpecs::ModifyOrderQuantity &modifyOrderQuantity) {
+            messageSpecs::OrderResponse orderResponse;
             if(orders.find(modifyOrderQuantity.orderId) == orders.end()) {
                 std::cerr<<"Modify instruction for order with order ID: "<<modifyOrderQuantity.orderId<<" doesn't exist. \n";
-                return;                
+                createResponse(orderResponse, false, modifyOrderQuantity.orderId);
+                return orderResponse;
             }
 
-            unique_ptr<orders::Order> &order = orders[modifyOrderQuantity.orderId];
+            std::shared_ptr<orders::Order> order = orders[modifyOrderQuantity.orderId];
 
             cout<<"------------------------------\n";
             cout<<"Attempting to modify order: \n";
@@ -117,12 +125,13 @@ namespace portfolio {
                 order->quantity = modifyOrderQuantity.newQuantity;
             }
 
+            
             createResponse(orderResponse, acceptanceStatus, modifyOrderQuantity.orderId);
 
             cout<<"Modification status: "<<(acceptanceStatus?"Accepted" : "Rejected")<<"\n";
             cout<<"------------------------------\n";
 
-            return;
+            return orderResponse;
 
         }
 
@@ -133,7 +142,7 @@ namespace portfolio {
                 return;     
             }
 
-            unique_ptr<orders::Order> &order = orders[trade.tradeId];
+            std::shared_ptr<orders::Order> order = orders[trade.tradeId];
             unique_ptr<instrument::FinancialInstrument> &instrument = instruments[trade.listingId];
 
             instrument->handleTrade(trade.tradeQuantity, order->side);
@@ -152,19 +161,25 @@ namespace portfolio {
         }
 
         void deleteUser(const uint64_t &userId) {
-            cout<<"------------------------------\n";
-            cout<<"Discarding orders for user ID: "<<userId<<"\n";           
-            for(uint64_t &orderId: userOrders[userId]) {
-                if(orders.find(orderId)!= orders.end()) {
-                    unique_ptr<orders::Order> &order = orders[orderId];
-                    unique_ptr<instrument::FinancialInstrument> &instrument = instruments[order->instrumentId];
-                    instrument->deleteOrder(order);
-                    orders.erase(orderId);                    
-                }
-            }
 
-            userOrders.erase(userId);
-            cout<<"User deleted \n";
+            cout<<"------------------------------\n";
+            cout<<"Discarding orders for user ID: "<<userId<<"\n";   
+
+            if(userOrders.find(userId) == userOrders.end()) {
+                cout<<"User has no orders, nothing to delete.\n";
+            }
+            else {
+                for(uint64_t &orderId: userOrders[userId]) {
+                    if(orders.find(orderId)!= orders.end()) {
+                        std::shared_ptr<orders::Order> order = orders[orderId];
+                        unique_ptr<instrument::FinancialInstrument> &instrument = instruments[order->instrumentId];
+                        instrument->deleteOrder(order);
+                        orders.erase(orderId);                    
+                    }
+                }
+                userOrders.erase(userId);
+                cout<<"User deleted \n";
+            }
             cout<<"------------------------------\n"; 
 
             return;

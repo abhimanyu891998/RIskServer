@@ -13,8 +13,9 @@
 #include<iostream>
 #include<memory>
 #include<chrono>
-#include "./messageStructures.hpp"
-#include "./PortfolioRiskManager/PortfolioRiskManager.hpp"
+#include "../messageStructures.hpp"
+#include "../PortfolioRiskManager/PortfolioRiskManager.hpp"
+#include "../Config/config.hpp"
 
 using std::cout;
 using std::cin;
@@ -24,8 +25,63 @@ using std::unique_ptr;
 #define FALSE  0 
 #define PORT 51717 
 
+char* createMessage(const messageSpecs::OrderResponse &response, const uint32_t &currentSequenceNumber) {
+    char *message = new char[28];
+    messageSpecs::Header header;
+    header.payloadSize = 12;
+    header.sequenceNumber = currentSequenceNumber+1;
+    header.timestamp = std::chrono::duration_cast<std::chrono::nanoseconds> (std::chrono::system_clock::now().time_since_epoch()).count();
+    std::memcpy(message, &header, 16);
+    std::memcpy(message+16, &response, 12);
 
-void parseMessage(const int sd, char* buffer, unique_ptr<portfolio::PortfolioRiskManager> &riskManager) {
+    return message;
+
+}
+
+void parseMessage(const int &sd, int &valread, char* buffer, unique_ptr<portfolio::PortfolioRiskManager> &riskManager) {
+
+    messageSpecs::Header header;
+    std::memcpy(&header, buffer, 16);
+    valread = read(sd, buffer, header.payloadSize);
+
+    uint16_t *messageType = (uint16_t*) buffer;
+    cout<<"Message type is: "<<*messageType<<"\n";
+    char *message;
+    switch(*messageType) {
+        case messageSpecs::NewOrder::MESSAGE_TYPE: { messageSpecs::NewOrder newOrder;
+                                                   std::memcpy(&newOrder, buffer, header.payloadSize);
+                                                   messageSpecs::OrderResponse response = riskManager->newOrder(sd, newOrder);
+                                                   message = createMessage(response, header.sequenceNumber);
+                                                   cout<<"Sending message \n";
+                                                   send(sd,message,28,0);
+                                                   break;
+                                                   }
+
+        case messageSpecs::DeleteOrder::MESSAGE_TYPE: { messageSpecs::DeleteOrder orderToBeDeleted;
+                                                      std::memcpy(&orderToBeDeleted, buffer, header.payloadSize);
+                                                      riskManager->deleteOrder(orderToBeDeleted);
+                                                      break;
+                                                      }
+
+        case messageSpecs::ModifyOrderQuantity::MESSAGE_TYPE: { messageSpecs::ModifyOrderQuantity modifyOrderQuantity;
+                                                              std::memcpy(&modifyOrderQuantity, buffer, header.payloadSize);
+                                                              messageSpecs::OrderResponse response = riskManager->modifyOrder(modifyOrderQuantity);
+                                                              message = createMessage(response, header.sequenceNumber);
+                                                              send(sd,message,28,0);
+                                                              break;
+                                                              }
+
+        case messageSpecs::Trade::MESSAGE_TYPE: { messageSpecs::Trade trade;
+                                                std::memcpy(&trade, buffer, header.payloadSize);
+                                                riskManager->trade(trade);
+                                                break;
+                                                }
+
+
+        
+    }
+
+    return;
 
 }
 
@@ -40,14 +96,24 @@ int main(int argc , char *argv[])
     int max_sd;  
     struct sockaddr_in address;  
          
-    char buffer[1025];  //data buffer of 1K 
+    char buffer[1025];  //data buffer of 1K
+    configuration::Config config;
+
+    config.BUY_THRESHOLD = 20;
+    config.SELL_THRESHOLD = 15;
+
+    if(argc>=3)
+        config.BUY_THRESHOLD = std::atoi(argv[2]);
+
+    if(argc>=4)
+        config.SELL_THRESHOLD = std::atoi(argv[3]);
+        
+    
+    unique_ptr<portfolio::PortfolioRiskManager> riskManager = std::make_unique<portfolio::PortfolioRiskManager>(config); 
          
     //set of socket descriptors 
-    fd_set readfds;  
+    fd_set readfds;   
          
-    //a message 
-    char *message = "Connected to the risk server \r\n";  
-     
     //initialise all client_socket[] to 0 so not checked 
     for (i = 0; i < max_clients; i++)  
     {  
@@ -125,7 +191,8 @@ int main(int argc , char *argv[])
         if ((activity < 0) && (errno!=EINTR))  
         {  
             printf("select error");  
-        }  
+        } 
+
              
         //If something happened on the master socket , 
         //then its an incoming connection 
@@ -140,15 +207,7 @@ int main(int argc , char *argv[])
              
             //inform user of socket number - used in send and receive commands 
             printf("New connection , socket fd is %d , ip is : %s , port : %d \n" , new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port)); 
-           
-            //send new connection greeting message 
-            if( send(new_socket, message, strlen(message), 0) != strlen(message) )  
-            {  
-                perror("send");  
-            }  
-                 
-            puts("Welcome message sent successfully");  
-                 
+                
             //add new socket to array of sockets 
             for (i = 0; i < max_clients; i++)  
             {  
@@ -160,7 +219,9 @@ int main(int argc , char *argv[])
                          
                     break;  
                 }  
-            }  
+            }
+
+
         }  
              
         //else its some IO operation on some other socket
@@ -172,27 +233,28 @@ int main(int argc , char *argv[])
             {  
                 //Check if it was for closing , and also read the 
                 //incoming message 
-                if ((valread = read( sd , buffer, 1024)) == 0)  
+                if ((valread = read( sd , buffer, 16)) <= 0)  
                 {  
                     //Somebody disconnected , get his details and print 
                     getpeername(sd , (struct sockaddr*)&address , \
                         (socklen_t*)&addrlen);  
-                    printf("Host disconnected , ip %s , port %d \n" , 
-                          inet_ntoa(address.sin_addr) , ntohs(address.sin_port));  
-                         
+					printf("Host disconnected , ip %s , port %d \n", inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+
+                    //Handle disconnected user
+                    riskManager->deleteUser(sd);
+
                     //Close the socket and mark as 0 in list for reuse 
                     close( sd );  
                     client_socket[i] = 0;  
                 }  
                      
-                //Echo back the message that came in 
                 else 
                 {  
-                    //set the string terminating NULL byte on the end 
-                    //of the data read 
-                    buffer[valread] = '\0';  
-                    send(sd , buffer , strlen(buffer) , 0 );  
-                }  
+                    cout<<valread<<" bytes read \n";
+                    parseMessage(sd,valread,buffer,riskManager);
+                    cout<<"\n";
+                }
+
             }  
         }  
     }  

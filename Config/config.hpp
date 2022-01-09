@@ -2,9 +2,13 @@
 
 #include<iostream>
 
-struct Config {
+namespace configuration {
 
-    static uint64_t BUY_THRESHOLD;
-    static uint64_t SELL_THRESHOLD;
+    struct Config {
 
-};
+    uint64_t BUY_THRESHOLD;
+    uint64_t SELL_THRESHOLD;
+
+    };
+
+}
