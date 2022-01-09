@@ -24,8 +24,6 @@ namespace portfolio {
         unordered_map<uint64_t, std::unique_ptr<orders::Order>> orders;
         unordered_map<uint16_t, vector<uint64_t>> userOrders;
         unordered_map<uint16_t, std::unique_ptr<instrument::FinancialInstrument>> instruments;
-        int BUY_THRESHOLD;
-        int SELL_THRESHOLD;
 
         void createResponse(messageSpecs::OrderResponse &orderResponse, const bool &acceptanceStatus, const uint64_t &orderId) {
             orderResponse.messageType = messageSpecs::OrderResponse::MESSAGE_TYPE;
